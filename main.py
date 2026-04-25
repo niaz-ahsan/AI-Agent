@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 from google import genai
 import argparse
 from google.genai import types
+from prompts import system_prompt
 
 def get_user_prompt():
     parser = argparse.ArgumentParser(description="LLM Prompt")
@@ -17,11 +18,16 @@ def main():
     if api_key is None:
         raise RuntimeError("No API Key found!")
     client = genai.Client(api_key=api_key)
+    llm_model = 'gemini-2.5-flash'
     prompt, is_detail = get_user_prompt()
     messages = [types.Content(role="user", parts=[types.Part(text=prompt)])]
     response = client.models.generate_content(
-        model = 'gemini-2.5-flash', 
-        contents = messages 
+        model=llm_model, 
+        contents=messages,
+        config=types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=0
+        ), 
     )
     if response.usage_metadata is None:
         raise RuntimeError("Something went wrong with Gemini API")
