@@ -4,6 +4,7 @@ from google import genai
 import argparse
 from google.genai import types
 from prompts import system_prompt
+from call_function import available_functions
 
 def get_user_prompt():
     parser = argparse.ArgumentParser(description="LLM Prompt")
@@ -11,6 +12,15 @@ def get_user_prompt():
     parser.add_argument("--verbose", action="store_true", help="Enable verbose output")
     args = parser.parse_args()
     return args.user_prompt, args.verbose
+
+def build_response(response):
+    function_calls = response.function_calls
+    if function_calls is not None:
+        output = []
+        for fc in function_calls:
+            output.append(f"Calling function: {fc.name}({fc.args})")
+        return "\n".join(output)
+    return response.text
 
 def main():
     load_dotenv()
@@ -25,6 +35,7 @@ def main():
         model=llm_model, 
         contents=messages,
         config=types.GenerateContentConfig(
+            tools=[available_functions],
             system_instruction=system_prompt,
             temperature=0
         ), 
@@ -35,7 +46,8 @@ def main():
         print(f"User prompt: {prompt}")
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-    print(f"Response:\n{response.text}")
+    if response:
+        print(build_response(response))
 
 
 if __name__ == "__main__":
