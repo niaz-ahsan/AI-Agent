@@ -28,8 +28,37 @@ def build_response(response, verbose):
             output.append(function_call_result.parts[0])
             if verbose:
                 print(f"-> {function_call_result.parts[0].function_response.response}")
-        return
+        return output
     print(response.text)
+    return "break"
+
+def call_model(client, model, user_prompt, verbose, messages):
+    response = client.models.generate_content(
+        model=model, 
+        contents=messages,
+        config=types.GenerateContentConfig(
+            tools=[available_functions],
+            system_instruction=system_prompt,
+            temperature=0
+        ), 
+    )
+    candidates = response.candidates
+    if candidates:
+            for cand in candidates:
+                messages.append(cand.content)
+    if response.usage_metadata is None:
+        raise RuntimeError("Something went wrong with Gemini API")
+    if verbose:
+        print(f"User prompt: {user_prompt}")
+        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
+        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
+    if response:
+        function_responses = build_response(response, verbose)
+        if type(function_responses) == str and function_responses == "break":
+            return 1
+        to_append = types.Content(role="user", parts=function_responses)
+        messages.append(to_append)
+        return 0
 
 def main():
     load_dotenv()
@@ -40,23 +69,14 @@ def main():
     llm_model = 'gemini-2.5-flash'
     prompt, is_detail = get_user_prompt()
     messages = [types.Content(role="user", parts=[types.Part(text=prompt)])]
-    response = client.models.generate_content(
-        model=llm_model, 
-        contents=messages,
-        config=types.GenerateContentConfig(
-            tools=[available_functions],
-            system_instruction=system_prompt,
-            temperature=0
-        ), 
-    )
-    if response.usage_metadata is None:
-        raise RuntimeError("Something went wrong with Gemini API")
-    if is_detail:
-        print(f"User prompt: {prompt}")
-        print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
-        print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
-    if response:
-        build_response(response, is_detail)
+    should_exit = 0
+    for _ in range(20):
+        should_exit = call_model(client, llm_model, prompt, is_detail, messages)
+        if should_exit:
+            break
+    if should_exit == 0:
+        print("Max limit of iteration reached.")
+        exit(1)
 
 
 if __name__ == "__main__":
