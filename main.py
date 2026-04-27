@@ -4,7 +4,7 @@ from google import genai
 import argparse
 from google.genai import types
 from prompts import system_prompt
-from call_function import available_functions
+from call_function import available_functions, call_function
 
 def get_user_prompt():
     parser = argparse.ArgumentParser(description="LLM Prompt")
@@ -13,14 +13,23 @@ def get_user_prompt():
     args = parser.parse_args()
     return args.user_prompt, args.verbose
 
-def build_response(response):
+def build_response(response, verbose):
     function_calls = response.function_calls
     if function_calls is not None:
         output = []
         for fc in function_calls:
-            output.append(f"Calling function: {fc.name}({fc.args})")
-        return "\n".join(output)
-    return response.text
+            function_call_result = call_function(fc, verbose)
+            if len(function_call_result.parts) < 1:
+                raise Exception("Parts not found in types.Content")
+            if function_call_result.parts[0].function_response is None:
+                raise Exception("function_response not found in parts[0]")
+            if function_call_result.parts[0].function_response.response is None:
+                raise Exception("response not found in parts[0].function_response")
+            output.append(function_call_result.parts[0])
+            if verbose:
+                print(f"-> {function_call_result.parts[0].function_response.response}")
+        return
+    print(response.text)
 
 def main():
     load_dotenv()
@@ -47,7 +56,7 @@ def main():
         print(f"Prompt tokens: {response.usage_metadata.prompt_token_count}")
         print(f"Response tokens: {response.usage_metadata.candidates_token_count}")
     if response:
-        print(build_response(response))
+        build_response(response, is_detail)
 
 
 if __name__ == "__main__":
